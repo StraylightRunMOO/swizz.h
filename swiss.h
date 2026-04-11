@@ -64,6 +64,109 @@ static inline bool bloom_may_contain(const uint64_t bloom[4], uint64_t h)
     return true;
 }
 
+/* ------------------------------------------------------------------
+ * SIMD group probing configuration (AVX2 / SSE2 / NEON / scalar)
+ * ------------------------------------------------------------------ */
+#if defined(__AVX2__)
+#  include <immintrin.h>
+#  define SWISS_GROUP_WIDTH 32
+#  define SWISS_USE_SIMD 1
+   typedef __m256i swiss_group_t;
+#  define swiss_group_load(p)     _mm256_loadu_si256((const __m256i*)(p))
+#  define swiss_group_bcast(fp)   _mm256_set1_epi8((char)(fp))
+#  define swiss_group_cmpeq(g,f)  _mm256_cmpeq_epi8((g),(f))
+#  define swiss_group_mask(m)     _mm256_movemask_epi8(m)
+#  define swiss_group_or(a,b)     _mm256_or_si256((a),(b))
+#elif defined(__SSE2__)
+#  include <emmintrin.h>
+#  define SWISS_GROUP_WIDTH 16
+#  define SWISS_USE_SIMD 1
+   typedef __m128i swiss_group_t;
+#  define swiss_group_load(p)     _mm_loadu_si128((const __m128i*)(p))
+#  define swiss_group_bcast(fp)   _mm_set1_epi8((char)(fp))
+#  define swiss_group_cmpeq(g,f)  _mm_cmpeq_epi8((g),(f))
+#  define swiss_group_mask(m)     _mm_movemask_epi8(m)
+#  define swiss_group_or(a,b)     _mm_or_si128((a),(b))
+#elif defined(__ARM_NEON) || defined(__ARM_NEON__)
+#  include <arm_neon.h>
+#  define SWISS_GROUP_WIDTH 16
+#  define SWISS_USE_SIMD 1
+   typedef uint8x16_t swiss_group_t;
+#  define swiss_group_load(p)     vld1q_u8((const uint8_t*)(p))
+#  define swiss_group_bcast(fp)   vdupq_n_u8(fp)
+#  define swiss_group_cmpeq(g,f)  vceqq_u8((g),(f))
+#  define swiss_group_or(a,b)     vorrq_u8((a),(b))
+   /* NEON movemask: extract comparison results to 16-bit mask */
+   static inline int swiss_neon_movemask(uint8x16_t v) {
+       /* v has 0xFF for equal bytes - extract bit 7 from each byte */
+       uint8_t bytes[16];
+       vst1q_u8(bytes, v);
+       int mask = 0;
+       for (int i = 0; i < 16; i++) {
+           mask |= ((bytes[i] >> 7) & 1) << i;
+       }
+       return mask;
+   }
+#  define swiss_group_mask(m)     swiss_neon_movemask(m)
+#else
+#  define SWISS_GROUP_WIDTH 1
+#  define SWISS_USE_SIMD 0
+   typedef uint8_t swiss_group_t;
+#endif
+
+/* Load factor: 7/8 for SIMD (better cache utilization), 1/2 for scalar */
+#if SWISS_USE_SIMD
+#  define SWISS_LOAD_FACTOR(cap)  (((cap) * 7) >> 3)
+#else
+#  define SWISS_LOAD_FACTOR(cap)  ((cap) >> 1)
+#endif
+
+/* ------------------------------------------------------------------
+ * SIMD-accelerated group probing helpers
+ * ------------------------------------------------------------------ */
+
+/* Probe for matching fingerprint - returns bitmask of matches */
+static inline int swiss_probe_group(const uint8_t *ctrl, uint8_t fp)
+{
+#if SWISS_USE_SIMD
+    swiss_group_t group = swiss_group_load((const swiss_group_t*)ctrl);
+    swiss_group_t fingerprint = swiss_group_bcast(fp);
+    swiss_group_t cmp = swiss_group_cmpeq(group, fingerprint);
+    return swiss_group_mask(cmp);
+#else
+    return (*ctrl == fp) ? 1 : 0;
+#endif
+}
+
+/* Probe for empty slots - returns bitmask of empty (0x00) slots */
+static inline int swiss_probe_empty(const uint8_t *ctrl)
+{
+#if SWISS_USE_SIMD
+    swiss_group_t group = swiss_group_load((const swiss_group_t*)ctrl);
+    swiss_group_t empty = swiss_group_bcast(0x00);
+    swiss_group_t cmp = swiss_group_cmpeq(group, empty);
+    return swiss_group_mask(cmp);
+#else
+    return (*ctrl == 0x00) ? 1 : 0;
+#endif
+}
+
+/* Probe for empty or deleted slots - returns bitmask of available slots */
+static inline int swiss_probe_available(const uint8_t *ctrl)
+{
+#if SWISS_USE_SIMD
+    swiss_group_t group = swiss_group_load((const swiss_group_t*)ctrl);
+    swiss_group_t empty = swiss_group_bcast(0x00);
+    swiss_group_t deleted = swiss_group_bcast(0x80);
+    swiss_group_t cmp_empty = swiss_group_cmpeq(group, empty);
+    swiss_group_t cmp_deleted = swiss_group_cmpeq(group, deleted);
+    swiss_group_t cmp = swiss_group_or(cmp_empty, cmp_deleted);
+    return swiss_group_mask(cmp);
+#else
+    return (*ctrl == 0x00 || *ctrl == 0x80) ? 1 : 0;
+#endif
+}
+
 #endif /* SWISS_H_INTERNAL_GUARD */
 
 /* ------------------------------------------------------------------
@@ -83,6 +186,38 @@ static inline bool bloom_may_contain(const uint64_t bloom[4], uint64_t h)
 #endif
 #ifndef SWISS_ALLOC_FREE
 #define SWISS_ALLOC_FREE(p) free(p)
+#endif
+
+/* ------------------------------------------------------------------
+ * Aligned allocation for SIMD control bytes
+ * ------------------------------------------------------------------ */
+#if SWISS_USE_SIMD
+/* Aligned allocation: stores original pointer at start for later free */
+static inline uint8_t* swiss_alloc_ctrl_aligned(size_t cap)
+{
+    size_t align = SWISS_GROUP_WIDTH;
+    /* Allocate extra space for alignment padding and original pointer storage */
+    void *raw = SWISS_ALLOC_MALLOC(cap + align + sizeof(void*));
+    if (!raw) return NULL;
+    
+    /* Calculate aligned address */
+    uintptr_t addr = (uintptr_t)raw + sizeof(void*);
+    addr = (addr + align - 1) & ~(align - 1);
+    
+    /* Store original pointer just before aligned address */
+    void **storage = (void**)(addr - sizeof(void*));
+    *storage = raw;
+    
+    return (uint8_t*)addr;
+}
+
+/* Free aligned control bytes - reads original pointer from storage */
+static inline void swiss_free_ctrl_aligned(uint8_t *ctrl)
+{
+    if (!ctrl) return;
+    void **storage = (void**)((uintptr_t)ctrl - sizeof(void*));
+    SWISS_ALLOC_FREE(*storage);
+}
 #endif
 
 /* ------------------------------------------------------------------
@@ -138,7 +273,11 @@ static inline void SWISS_FREE_FN(SWISS_TABLE_T *table)
             }
         }
         SWISS_ALLOC_FREE(table->entries);
+#if SWISS_USE_SIMD
+        swiss_free_ctrl_aligned(table->ctrl);
+#else
         SWISS_ALLOC_FREE(table->ctrl);
+#endif
     }
     memset(table, 0, sizeof(*table));
 }
@@ -162,9 +301,16 @@ static inline void SWISS_REBUILD(SWISS_TABLE_T *table)
 
     uint32_t cap = 4;
     while (cap < valid_count * 2) cap <<= 1;
+#if SWISS_USE_SIMD
+    if (cap < SWISS_GROUP_WIDTH) cap = SWISS_GROUP_WIDTH;
+#endif
 
     SWISS_ENTRY_T *new_entries = SWISS_ALLOC_CALLOC(cap, sizeof(SWISS_ENTRY_T));
+#if SWISS_USE_SIMD
+    uint8_t *new_ctrl = swiss_alloc_ctrl_aligned(cap);
+#else
     uint8_t *new_ctrl = SWISS_ALLOC_MALLOC(cap);
+#endif
     if (!new_entries || !new_ctrl) return;  /* OOM — leave old table intact */
 
     memset(new_ctrl, 0x00, cap);
@@ -194,7 +340,11 @@ static inline void SWISS_REBUILD(SWISS_TABLE_T *table)
     }
 
     SWISS_ALLOC_FREE(table->entries);
+#if SWISS_USE_SIMD
+    swiss_free_ctrl_aligned(table->ctrl);
+#else
     SWISS_ALLOC_FREE(table->ctrl);
+#endif
     table->entries = new_entries;
     table->ctrl = new_ctrl;
     table->capacity = cap;
@@ -216,6 +366,43 @@ static inline SWISS_ENTRY_T* SWISS_FIND(SWISS_TABLE_T *table, SWISS_KEY_TYPE key
     uint32_t slot = (uint32_t)(h & (cap - 1));
     uint8_t fp = entry_fingerprint(h);
 
+#if SWISS_USE_SIMD
+    /* SIMD-accelerated group probing */
+    uint32_t start_slot = slot;
+    while (1) {
+        uint32_t group_start = slot & ~(SWISS_GROUP_WIDTH - 1);
+        int mask = swiss_probe_group(&table->ctrl[group_start], fp);
+        
+        /* Check each matching slot in the group */
+        while (mask != 0) {
+            int bit = __builtin_ctz(mask);
+            uint32_t candidate = group_start + bit;
+            if (candidate >= cap) candidate -= cap; /* wrap around */
+            
+            if (table->ctrl[candidate] == fp) {
+                SWISS_ENTRY_T *e = &table->entries[candidate];
+                if (SWISS_EQ(e->key, key)) return e;
+            }
+            mask &= mask - 1; /* clear lowest bit */
+        }
+        
+        /* Check for empty slot at or after the starting position within the group.
+         * We only stop if we find an empty slot in the probe sequence.
+         * For the first group, check from starting offset. For subsequent groups, check all. */
+        int empty_mask = swiss_probe_empty(&table->ctrl[group_start]);
+        if (slot == start_slot) {
+            /* First group: check empty slots at or after start position */
+            int offset_in_group = slot - group_start;
+            empty_mask &= ~((1 << offset_in_group) - 1);
+        }
+        if (empty_mask != 0) return NULL;
+        
+        /* Move to next group */
+        slot = (group_start + SWISS_GROUP_WIDTH) & (cap - 1);
+        if (slot == start_slot) return NULL; /* full circle */
+    }
+#else
+    /* Scalar fallback */
     while (table->ctrl[slot] != 0x00) {
         if (table->ctrl[slot] == fp) {
             SWISS_ENTRY_T *e = &table->entries[slot];
@@ -224,6 +411,7 @@ static inline SWISS_ENTRY_T* SWISS_FIND(SWISS_TABLE_T *table, SWISS_KEY_TYPE key
         slot = (slot + 1) & (cap - 1);
     }
     return NULL;
+#endif
 }
 
 static inline SWISS_ENTRY_T* SWISS_ADD(SWISS_TABLE_T *table, SWISS_KEY_TYPE key, SWISS_VALUE_TYPE value, unsigned flags)
@@ -244,9 +432,18 @@ static inline SWISS_ENTRY_T* SWISS_ADD(SWISS_TABLE_T *table, SWISS_KEY_TYPE key,
 
     /* first insert — allocate initial table */
     if (!table->entries) {
+#if SWISS_USE_SIMD
+        /* Minimum capacity must be at least group width for SIMD loads */
+        table->capacity = (4 > SWISS_GROUP_WIDTH) ? 4 : SWISS_GROUP_WIDTH;
+#else
         table->capacity = 4;
+#endif
         table->entries = SWISS_ALLOC_CALLOC(table->capacity, sizeof(SWISS_ENTRY_T));
+#if SWISS_USE_SIMD
+        table->ctrl = swiss_alloc_ctrl_aligned(table->capacity);
+#else
         table->ctrl = SWISS_ALLOC_MALLOC(table->capacity);
+#endif
         if (!table->entries || !table->ctrl) {
             SWISS_FREE_KEY(key_copy);
             return NULL;
@@ -255,11 +452,19 @@ static inline SWISS_ENTRY_T* SWISS_ADD(SWISS_TABLE_T *table, SWISS_KEY_TYPE key,
         memset(table->bloom, 0, sizeof(table->bloom));
         table->generation = 1;
     }
-    /* grow if load > 0.5 */
-    else if (table->count >= table->capacity / 2) {
+    /* grow if load factor exceeded */
+    else if (table->count >= SWISS_LOAD_FACTOR(table->capacity)) {
         uint32_t new_cap = table->capacity * 2;
+#if SWISS_USE_SIMD
+        /* Ensure new capacity is at least group width */
+        if (new_cap < SWISS_GROUP_WIDTH) new_cap = SWISS_GROUP_WIDTH;
+#endif
         SWISS_ENTRY_T *new_entries = SWISS_ALLOC_CALLOC(new_cap, sizeof(SWISS_ENTRY_T));
+#if SWISS_USE_SIMD
+        uint8_t *new_ctrl = swiss_alloc_ctrl_aligned(new_cap);
+#else
         uint8_t *new_ctrl = SWISS_ALLOC_MALLOC(new_cap);
+#endif
         if (!new_entries || !new_ctrl) {
             SWISS_FREE_KEY(key_copy);
             return NULL;
@@ -279,18 +484,53 @@ static inline SWISS_ENTRY_T* SWISS_ADD(SWISS_TABLE_T *table, SWISS_KEY_TYPE key,
         }
 
         SWISS_ALLOC_FREE(table->entries);
+#if SWISS_USE_SIMD
+        swiss_free_ctrl_aligned(table->ctrl);
+#else
         SWISS_ALLOC_FREE(table->ctrl);
+#endif
         table->entries = new_entries;
         table->ctrl = new_ctrl;
         table->capacity = new_cap;
         table->generation++;
     }
 
-    /* insert */
-    uint32_t slot = (uint32_t)(h & (table->capacity - 1));
-    while (table->ctrl[slot] != 0x00 && table->ctrl[slot] != 0x80) {
-        slot = (slot + 1) & (table->capacity - 1);
+    /* insert - find empty or deleted slot */
+    uint32_t cap = table->capacity;
+    uint32_t slot = (uint32_t)(h & (cap - 1));
+    
+#if SWISS_USE_SIMD
+    /* SIMD-accelerated search for available slot */
+    uint32_t start_slot = slot;
+    int first_group = 1;
+    while (1) {
+        uint32_t group_start = slot & ~(SWISS_GROUP_WIDTH - 1);
+        int mask = swiss_probe_available(&table->ctrl[group_start]);
+        
+        /* On first iteration, clear bits before the starting slot within the group */
+        if (first_group) {
+            int offset_in_group = slot - group_start;
+            mask &= ~((1 << offset_in_group) - 1);
+            first_group = 0;
+        }
+        
+        if (mask != 0) {
+            int bit = __builtin_ctz(mask);
+            slot = group_start + bit;
+            if (slot >= cap) slot -= cap; /* wrap around */
+            break;
+        }
+        
+        /* Move to next group */
+        slot = (group_start + SWISS_GROUP_WIDTH) & (cap - 1);
+        if (slot == start_slot) return NULL; /* table full (shouldn't happen) */
     }
+#else
+    /* Scalar fallback */
+    while (table->ctrl[slot] != 0x00 && table->ctrl[slot] != 0x80) {
+        slot = (slot + 1) & (cap - 1);
+    }
+#endif
 
     SWISS_ENTRY_T e = {0};
     e.key = key_copy;
@@ -315,6 +555,48 @@ static inline bool SWISS_DELETE(SWISS_TABLE_T *table, SWISS_KEY_TYPE key)
     uint32_t slot = (uint32_t)(h & (cap - 1));
     uint8_t fp = entry_fingerprint(h);
 
+#if SWISS_USE_SIMD
+    /* SIMD-accelerated group probing */
+    uint32_t start_slot = slot;
+    while (1) {
+        uint32_t group_start = slot & ~(SWISS_GROUP_WIDTH - 1);
+        int mask = swiss_probe_group(&table->ctrl[group_start], fp);
+        
+        /* Check each matching slot in the group */
+        while (mask != 0) {
+            int bit = __builtin_ctz(mask);
+            uint32_t candidate = group_start + bit;
+            if (candidate >= cap) candidate -= cap; /* wrap around */
+            
+            if (table->ctrl[candidate] == fp) {
+                SWISS_ENTRY_T *e = &table->entries[candidate];
+                if (SWISS_EQ(e->key, key)) {
+                    table->ctrl[candidate] = 0x80;
+                    SWISS_FREE_KEY(e->key);
+                    e->key = NULL;
+                    e->hash = 0;
+                    table->count--;
+                    return true;
+                }
+            }
+            mask &= mask - 1; /* clear lowest bit */
+        }
+        
+        /* Check for empty slot at or after the starting position within the group */
+        int empty_mask = swiss_probe_empty(&table->ctrl[group_start]);
+        if (slot == start_slot) {
+            /* First group: check empty slots at or after start position */
+            int offset_in_group = slot - group_start;
+            empty_mask &= ~((1 << offset_in_group) - 1);
+        }
+        if (empty_mask != 0) return false;
+        
+        /* Move to next group */
+        slot = (group_start + SWISS_GROUP_WIDTH) & (cap - 1);
+        if (slot == start_slot) return false; /* full circle */
+    }
+#else
+    /* Scalar fallback */
     while (table->ctrl[slot] != 0x00) {
         if (table->ctrl[slot] == fp) {
             SWISS_ENTRY_T *e = &table->entries[slot];
@@ -330,6 +612,7 @@ static inline bool SWISS_DELETE(SWISS_TABLE_T *table, SWISS_KEY_TYPE key)
         slot = (slot + 1) & (cap - 1);
     }
     return false;
+#endif
 }
 
 /* Undefine macros to allow re-inclusion with different parameters */
