@@ -1,8 +1,8 @@
-# swiss.h
+# swizz.h
 
 [![api reference](https://img.shields.io/badge/api-reference-blue.svg)](docs/API.md)
 
-swiss.h is a [Swiss Table](https://abseil.io/about/design/swisstables) hash table generator for C.
+swizz.h is a [Swiss Table](https://abseil.io/about/design/swisstables) hash table generator for C.
 It's small, fast, and includes options for creating custom hash-based collections
 with different key types, value types, and hash functions.
 
@@ -23,7 +23,7 @@ with different key types, value types, and hash functions.
 
 ## Using
 
-Just drop the "swiss.h" into your project and create your hash table using the 
+Just drop the "swizz.h" into your project and create your hash table using the 
 C preprocessor.
 
 ## Example 1 (Basic symbol table)
@@ -48,15 +48,15 @@ static inline const char* str_dup(const char *str) {
 // Define value type
 typedef struct { uint32_t id; unsigned flags; } symtab_value_t;
 
-// Configure the SwissTable
-#define SWISS_NAME symtab
-#define SWISS_KEY_TYPE const char*
-#define SWISS_VALUE_TYPE symtab_value_t
-#define SWISS_HASH(k) hash_string(k)
-#define SWISS_EQ(k1,k2) (!strcmp((k1),(k2)))
-#define SWISS_DUP_KEY(k) str_dup(k)
-#define SWISS_FREE_KEY(k) free((void*)(k))
-#include "swiss.h"
+// Configure the SwizzTable
+#define SWIZZ_NAME symtab
+#define SWIZZ_KEY_TYPE const char*
+#define SWIZZ_VALUE_TYPE symtab_value_t
+#define SWIZZ_HASH(k) hash_string(k)
+#define SWIZZ_EQ(k1,k2) (!strcmp((k1),(k2)))
+#define SWIZZ_DUP_KEY(k) str_dup(k)
+#define SWIZZ_FREE_KEY(k) free((void*)(k))
+#include "swizz.h"
 
 int main() {
     // Create an empty symbol table
@@ -104,14 +104,14 @@ static inline const char* str_dup(const char *str) {
 
 typedef struct { uint32_t id; } map_value_t;
 
-#define SWISS_NAME cmap
-#define SWISS_KEY_TYPE const char*
-#define SWISS_VALUE_TYPE map_value_t
-#define SWISS_HASH(k) hash_string_case_insensitive(k)
-#define SWISS_EQ(k1,k2) (!strcasecmp((k1),(k2)))
-#define SWISS_DUP_KEY(k) str_dup(k)
-#define SWISS_FREE_KEY(k) free((void*)(k))
-#include "swiss.h"
+#define SWIZZ_NAME cmap
+#define SWIZZ_KEY_TYPE const char*
+#define SWIZZ_VALUE_TYPE map_value_t
+#define SWIZZ_HASH(k) hash_string_case_insensitive(k)
+#define SWIZZ_EQ(k1,k2) (!strcasecmp((k1),(k2)))
+#define SWIZZ_DUP_KEY(k) str_dup(k)
+#define SWIZZ_FREE_KEY(k) free((void*)(k))
+#include "swizz.h"
 
 int main() {
     cmap_table table;
@@ -145,14 +145,14 @@ Create a table with 64-bit integer keys and pointer values.
 // Define value type
 typedef struct { void *ptr; uint32_t gen; } ptr_value_t;
 
-#define SWISS_NAME ptrmap
-#define SWISS_KEY_TYPE uint64_t
-#define SWISS_VALUE_TYPE ptr_value_t
-#define SWISS_HASH(k) (k)                     /* trivial for integers */
-#define SWISS_EQ(k1,k2) ((k1)==(k2))
-#define SWISS_DUP_KEY(k) (k)                  /* no-op for POD keys */
-#define SWISS_FREE_KEY(k) ((void)0)           /* no-op */
-#include "swiss.h"
+#define SWIZZ_NAME ptrmap
+#define SWIZZ_KEY_TYPE uint64_t
+#define SWIZZ_VALUE_TYPE ptr_value_t
+#define SWIZZ_HASH(k) (k)                     /* trivial for integers */
+#define SWIZZ_EQ(k1,k2) ((k1)==(k2))
+#define SWIZZ_DUP_KEY(k) (k)                  /* no-op for POD keys */
+#define SWIZZ_FREE_KEY(k) ((void)0)           /* no-op */
+#include "swizz.h"
 
 int main() {
     ptrmap_table table;
@@ -179,37 +179,37 @@ the [API reference](docs/API.md) for the full list of operations.
 
 ## Options
 
-SwissTable provides options for customizing your hash table. All options are
+SwizzTable provides options for customizing your hash table. All options are
 set using the C preprocessor.
 
 | Option                          | Description |
 | :------------------------------ | :---------- |
-| SWISS_NAME `<name>`             | The [Namespace](#namespaces) |
-| SWISS_KEY_TYPE `<type>`         | The hash table key type |
-| SWISS_VALUE_TYPE `<type>`       | The hash table value type |
-| SWISS_HASH(k) `<code>`          | Hash function [code fragment](#hash-functions) |
-| SWISS_EQ(k1,k2) `<code>`        | Equality comparison [code fragment](#equality-comparison) |
-| SWISS_DUP_KEY(k) `<code>`       | Key duplication [code fragment](#key-duplication) |
-| SWISS_FREE_KEY(k) `<code>`      | Key cleanup [code fragment](#key-cleanup) |
-| SWISS_ALLOC_MALLOC(sz) `<code>` | Custom [allocator](#custom-allocators) malloc |
-| SWISS_ALLOC_CALLOC(n,sz) `<code>` | Custom [allocator](#custom-allocators) calloc |
-| SWISS_ALLOC_FREE(p) `<code>`    | Custom [allocator](#custom-allocators) free |
+| SWIZZ_NAME `<name>`             | The [Namespace](#namespaces) |
+| SWIZZ_KEY_TYPE `<type>`         | The hash table key type |
+| SWIZZ_VALUE_TYPE `<type>`       | The hash table value type |
+| SWIZZ_HASH(k) `<code>`          | Hash function [code fragment](#hash-functions) |
+| SWIZZ_EQ(k1,k2) `<code>`        | Equality comparison [code fragment](#equality-comparison) |
+| SWIZZ_DUP_KEY(k) `<code>`       | Key duplication [code fragment](#key-duplication) |
+| SWIZZ_FREE_KEY(k) `<code>`      | Key cleanup [code fragment](#key-cleanup) |
+| SWIZZ_ALLOC_MALLOC(sz) `<code>` | Custom [allocator](#custom-allocators) malloc |
+| SWIZZ_ALLOC_CALLOC(n,sz) `<code>` | Custom [allocator](#custom-allocators) calloc |
+| SWIZZ_ALLOC_FREE(p) `<code>`    | Custom [allocator](#custom-allocators) free |
 
 ## Namespaces
 
-Each SwissTable will have its own namespace using the `SWISS_NAME` define.
+Each SwizzTable will have its own namespace using the `SWIZZ_NAME` define.
 
 For example, the following will create a hash table using the `symtab` namespace:
 
 ```c
-#define SWISS_NAME symtab
-#define SWISS_KEY_TYPE const char*
-#define SWISS_VALUE_TYPE struct { uint32_t id; }
-#define SWISS_HASH(k) hash_string(k)
-#define SWISS_EQ(k1,k2) (!strcmp((k1),(k2)))
-#define SWISS_DUP_KEY(k) str_dup(k)
-#define SWISS_FREE_KEY(k) free((void*)(k))
-#include "swiss.h"
+#define SWIZZ_NAME symtab
+#define SWIZZ_KEY_TYPE const char*
+#define SWIZZ_VALUE_TYPE struct { uint32_t id; }
+#define SWIZZ_HASH(k) hash_string(k)
+#define SWIZZ_EQ(k1,k2) (!strcmp((k1),(k2)))
+#define SWIZZ_DUP_KEY(k) str_dup(k)
+#define SWIZZ_FREE_KEY(k) free((void*)(k))
+#include "swizz.h"
 ```
 
 This will generate all the functions and types using the `symtab` prefix:
@@ -229,20 +229,20 @@ Many more functions are also available, see the [API](docs/API.md) for a complet
 It's also possible to generate multiple hash tables in the same source file:
 
 ```c
-#define SWISS_NAME strtab
-#define SWISS_KEY_TYPE const char*
-#define SWISS_VALUE_TYPE struct { uint32_t id; }
-#include "swiss.h"
+#define SWIZZ_NAME strtab
+#define SWIZZ_KEY_TYPE const char*
+#define SWIZZ_VALUE_TYPE struct { uint32_t id; }
+#include "swizz.h"
 
-#define SWISS_NAME inttab
-#define SWISS_KEY_TYPE uint64_t
-#define SWISS_VALUE_TYPE struct { void *ptr; }
-#include "swiss.h"
+#define SWIZZ_NAME inttab
+#define SWIZZ_KEY_TYPE uint64_t
+#define SWIZZ_VALUE_TYPE struct { void *ptr; }
+#include "swizz.h"
 
-#define SWISS_NAME ptrtab
-#define SWISS_KEY_TYPE void*
-#define SWISS_VALUE_TYPE struct { int ref_count; }
-#include "swiss.h"
+#define SWIZZ_NAME ptrtab
+#define SWIZZ_KEY_TYPE void*
+#define SWIZZ_VALUE_TYPE struct { int ref_count; }
+#include "swizz.h"
 ```
 
 For the remainder of this README, and unless otherwise specified, the prefix
@@ -250,10 +250,10 @@ For the remainder of this README, and unless otherwise specified, the prefix
 
 ## Hash Functions
 
-Every SwissTable requires a hash function defined using `SWISS_HASH`. This is
+Every SwizzTable requires a hash function defined using `SWIZZ_HASH`. This is
 a code fragment that takes a key and returns a `uint64_t` hash value.
 
-SwissTable provides two built-in hash functions for strings:
+SwizzTable provides two built-in hash functions for strings:
 
 ```c
 uint64_t hash_string(const char *str);              // case-sensitive
@@ -263,30 +263,30 @@ uint64_t hash_string_case_insensitive(const char *str);  // case-insensitive
 For integer keys, the hash can be the identity function:
 
 ```c
-#define SWISS_HASH(k) (k)
+#define SWIZZ_HASH(k) (k)
 ```
 
 ## Equality Comparison
 
-Every SwissTable requires an equality comparison defined using `SWISS_EQ`. This
+Every SwizzTable requires an equality comparison defined using `SWIZZ_EQ`. This
 is a code fragment that compares two keys and returns true if they are equal.
 
 For strings:
 
 ```c
-#define SWISS_EQ(k1,k2) (!strcmp((k1),(k2)))     // case-sensitive
-#define SWISS_EQ(k1,k2) (!strcasecmp((k1),(k2))) // case-insensitive
+#define SWIZZ_EQ(k1,k2) (!strcmp((k1),(k2)))     // case-sensitive
+#define SWIZZ_EQ(k1,k2) (!strcasecmp((k1),(k2))) // case-insensitive
 ```
 
 For integers:
 
 ```c
-#define SWISS_EQ(k1,k2) ((k1)==(k2))
+#define SWIZZ_EQ(k1,k2) ((k1)==(k2))
 ```
 
 ## Key Duplication
 
-The `SWISS_DUP_KEY` macro defines how keys are duplicated when inserted into
+The `SWIZZ_DUP_KEY` macro defines how keys are duplicated when inserted into
 the table. This is important because the table owns the key memory.
 
 For strings that need to be copied:
@@ -299,35 +299,35 @@ static inline const char* str_dup(const char *str) {
     if (copy) memcpy(copy, str, len + 1);
     return copy;
 }
-#define SWISS_DUP_KEY(k) str_dup(k)
+#define SWIZZ_DUP_KEY(k) str_dup(k)
 ```
 
 For POD (plain old data) keys like integers, no duplication is needed:
 
 ```c
-#define SWISS_DUP_KEY(k) (k)
+#define SWIZZ_DUP_KEY(k) (k)
 ```
 
 ## Key Cleanup
 
-The `SWISS_FREE_KEY` macro defines how keys are cleaned up when entries are
+The `SWIZZ_FREE_KEY` macro defines how keys are cleaned up when entries are
 deleted or when the table is freed.
 
 For heap-allocated strings:
 
 ```c
-#define SWISS_FREE_KEY(k) free((void*)(k))
+#define SWIZZ_FREE_KEY(k) free((void*)(k))
 ```
 
 For POD keys:
 
 ```c
-#define SWISS_FREE_KEY(k) ((void)0)
+#define SWIZZ_FREE_KEY(k) ((void)0)
 ```
 
 ## Bloom Filter
 
-SwissTable includes a 256-bit Bloom filter for fast negative lookups. Before
+SwizzTable includes a 256-bit Bloom filter for fast negative lookups. Before
 probing the hash table, the Bloom filter is checked to quickly determine if a
 key is definitely not present.
 
@@ -342,13 +342,13 @@ The Bloom filter is automatically maintained during all operations.
 
 ## Case-Insensitive Lookup
 
-By using `hash_string_case_insensitive` for `SWISS_HASH` and `strcasecmp` for
-`SWISS_EQ`, you can create a table where keys are compared without regard to
+By using `hash_string_case_insensitive` for `SWIZZ_HASH` and `strcasecmp` for
+`SWIZZ_EQ`, you can create a table where keys are compared without regard to
 case:
 
 ```c
-#define SWISS_HASH(k) hash_string_case_insensitive(k)
-#define SWISS_EQ(k1,k2) (!strcasecmp((k1),(k2)))
+#define SWIZZ_HASH(k) hash_string_case_insensitive(k)
+#define SWIZZ_EQ(k1,k2) (!strcasecmp((k1),(k2)))
 ```
 
 This is useful for symbol tables, configuration maps, and other cases where
@@ -356,25 +356,25 @@ case should not matter.
 
 ## Custom Allocators
 
-The `SWISS_ALLOC_MALLOC`, `SWISS_ALLOC_CALLOC`, and `SWISS_ALLOC_FREE` macros
+The `SWIZZ_ALLOC_MALLOC`, `SWIZZ_ALLOC_CALLOC`, and `SWIZZ_ALLOC_FREE` macros
 can be used to provide a custom allocator for all table operations. By default,
 the built-in `malloc()`, `calloc()`, and `free()` functions from `<stdlib.h>`
 are used.
 
 ```c
-#define SWISS_ALLOC_MALLOC(sz) mymalloc(sz)
-#define SWISS_ALLOC_CALLOC(nmemb, sz) mycalloc(nmemb, sz)
-#define SWISS_ALLOC_FREE(p) myfree(p)
+#define SWIZZ_ALLOC_MALLOC(sz) mymalloc(sz)
+#define SWIZZ_ALLOC_CALLOC(nmemb, sz) mycalloc(nmemb, sz)
+#define SWIZZ_ALLOC_FREE(p) myfree(p)
 ```
 
 ## Performance
 
-The following benchmarks show SwissTable performance compared to typical hash
+The following benchmarks show SwizzTable performance compared to typical hash
 table implementations.
 
 Benchmarking 100,000 keys, 5 runs, taking the average result on a modern CPU.
 
-### SwissTable
+### SwizzTable
 
 ```
 Insert              100,000 ops in   0.033 secs    330 ns/op     3,021,844 op/sec
@@ -386,9 +386,9 @@ Mixed workload      100,000 ops in   0.044 secs    440 ns/op     2,272,727 op/se
 
 ## Implementation Details
 
-SwissTable implements the following design features:
+SwizzTable implements the following design features:
 
-### Swiss Table Probing
+### Swizz Table Probing
 
 The implementation uses 8-bit fingerprints (hash prefixes) stored in a separate
 control byte array for cache-friendly lookups. This allows for SIMD-friendly
@@ -423,4 +423,4 @@ functionality.
 
 ## License
 
-SwissTable is released under the MIT License.
+SwizzTable is released under the MIT License.

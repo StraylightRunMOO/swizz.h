@@ -17,16 +17,16 @@ static inline const char* str_dup(const char *str) {
 typedef struct { uint32_t id; unsigned flags; } symtab_value_t;
 
 /* Define the generative table configuration */
-#define SWISS_NAME symtab
-#define SWISS_KEY_TYPE const char*
-#define SWISS_VALUE_TYPE symtab_value_t
-#define SWISS_HASH(k) hash_string_case_insensitive(k)
-#define SWISS_EQ(k1,k2) (!strcasecmp((k1),(k2)))
-#define SWISS_DUP_KEY(k) str_dup(k)
-#define SWISS_FREE_KEY(k) free((void*)(k))
-#include "../swiss.h"
+#define SWIZZ_NAME symtab
+#define SWIZZ_KEY_TYPE const char*
+#define SWIZZ_VALUE_TYPE symtab_value_t
+#define SWIZZ_HASH(k) hash_string_case_insensitive(k)
+#define SWIZZ_EQ(k1,k2) (!strcasecmp((k1),(k2)))
+#define SWIZZ_DUP_KEY(k) str_dup(k)
+#define SWIZZ_FREE_KEY(k) free((void*)(k))
+#include "../swizz.h"
 
-/* Stress tests for SwissTable generative API - edge cases and heavy load scenarios */
+/* Stress tests for SwizzTable generative API - edge cases and heavy load scenarios */
 
 #define TEST_PASS(msg) printf("  [PASS] %s\n", msg)
 #define TEST_FAIL(msg) do { printf("  [FAIL] %s\n", msg); return 0; } while(0)
@@ -449,7 +449,7 @@ static int test_simultaneous_updates(void)
 
 int main(void)
 {
-    printf("SwissTable Stress Tests (Generative API)\n");
+    printf("SwizzTable Stress Tests (Generative API)\n");
     printf("========================================\n");
     printf("Testing edge cases and heavy load scenarios...\n");
     

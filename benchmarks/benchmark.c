@@ -17,16 +17,16 @@ static inline const char* str_dup(const char *str) {
 typedef struct { uint32_t id; unsigned flags; } symtab_value_t;
 
 /* Define the generative table configuration */
-#define SWISS_NAME symtab
-#define SWISS_KEY_TYPE const char*
-#define SWISS_VALUE_TYPE symtab_value_t
-#define SWISS_HASH(k) hash_string_case_insensitive(k)
-#define SWISS_EQ(k1,k2) (!strcasecmp((k1),(k2)))
-#define SWISS_DUP_KEY(k) str_dup(k)
-#define SWISS_FREE_KEY(k) free((void*)(k))
-#include "../swiss.h"
+#define SWIZZ_NAME symtab
+#define SWIZZ_KEY_TYPE const char*
+#define SWIZZ_VALUE_TYPE symtab_value_t
+#define SWIZZ_HASH(k) hash_string_case_insensitive(k)
+#define SWIZZ_EQ(k1,k2) (!strcasecmp((k1),(k2)))
+#define SWIZZ_DUP_KEY(k) str_dup(k)
+#define SWIZZ_FREE_KEY(k) free((void*)(k))
+#include "../swizz.h"
 
-/* Simple benchmark suite for SwissTable generative API */
+/* Simple benchmark suite for SwizzTable generative API */
 
 #define NUM_KEYS 100000
 #define WARMUP_ITERATIONS 3
@@ -200,7 +200,7 @@ static double benchmark_mixed(int num_keys)
 
 int main(void)
 {
-    printf("SwissTable Benchmarks (Generative API)\n");
+    printf("SwizzTable Benchmarks (Generative API)\n");
     printf("======================================\n\n");
     printf("Running with %d keys\n\n", NUM_KEYS);
     
