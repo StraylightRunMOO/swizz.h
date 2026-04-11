@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(SwizzTable C)
+project(swizz.h C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -18,13 +18,13 @@ if(SWIZZ_ENABLE_SIMD)
     # x86 AVX2
     check_c_compiler_flag("-mavx2" COMPILER_HAS_AVX2)
     if(COMPILER_HAS_AVX2)
-        message(STATUS "SwizzTable: AVX2 support detected")
+        message(STATUS "Swizz.h: AVX2 support detected")
         list(APPEND SWIZZ_SIMD_FLAGS -mavx2)
     else()
         # Fallback to SSE2 on x86
         check_c_compiler_flag("-msse2" COMPILER_HAS_SSE2)
         if(COMPILER_HAS_SSE2)
-            message(STATUS "SwizzTable: SSE2 support detected")
+            message(STATUS "Swizz.h: SSE2 support detected")
             list(APPEND SWISS_SIMD_FLAGS -msse2)
         endif()
     endif()
@@ -32,7 +32,7 @@ if(SWIZZ_ENABLE_SIMD)
     # ARM NEON
     check_c_compiler_flag("-march=armv8-a+simd" COMPILER_HAS_NEON)
     if(COMPILER_HAS_NEON)
-        message(STATUS "SwizzTable: NEON support detected")
+        message(STATUS "Swizz.h: NEON support detected")
         list(APPEND SWISS_SIMD_FLAGS -march=armv8-a+simd)
     endif()
 endif()
@@ -61,4 +61,4 @@ endif()
 
 # Enable testing
 enable_testing()
-add_test(NAME SwizzTableTests COMMAND test_swizz)
+add_test(NAME Swizz_Tests COMMAND test_swizz)

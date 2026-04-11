@@ -26,7 +26,7 @@ typedef struct { uint32_t id; unsigned flags; } symtab_value_t;
 #define SWIZZ_FREE_KEY(k) free((void*)(k))
 #include "../swizz.h"
 
-/* Stress tests for SwizzTable generative API - edge cases and heavy load scenarios */
+/* Stress tests for Swizz.h generative API - edge cases and heavy load scenarios */
 
 #define TEST_PASS(msg) printf("  [PASS] %s\n", msg)
 #define TEST_FAIL(msg) do { printf("  [FAIL] %s\n", msg); return 0; } while(0)
@@ -449,7 +449,7 @@ static int test_simultaneous_updates(void)
 
 int main(void)
 {
-    printf("SwizzTable Stress Tests (Generative API)\n");
+    printf("Swizz.h Stress Tests (Generative API)\n");
     printf("========================================\n");
     printf("Testing edge cases and heavy load scenarios...\n");
     

@@ -1,4 +1,4 @@
-/* swizz.h — SwizzTable bgen-style generator
+/* swizz.h — Swizz.h bgen-style generator
  * C99 header-only, zero dependencies, -pedantic -Werror clean.
  * Drop this in your project and #include it after defining the macros above.
  * Multiple independent tables by re-#defining and re-including.

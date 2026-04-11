@@ -315,7 +315,7 @@ static int test_generation_counter(void)
 
 int main(void)
 {
-    printf("SwizzTable Test Suite (Generative API)\n");
+    printf("Swizz.h Test Suite (Generative API)\n");
     printf("======================================\n\n");
     
     RUN_TEST(test_init);

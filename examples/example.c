@@ -25,11 +25,11 @@ typedef struct { uint32_t id; unsigned flags; } symtab_value_t;
 #define SWIZZ_FREE_KEY(k) free((void*)(k))
 #include "../swizz.h"
 
-/* Example demonstrating SwizzTable generative API usage */
+/* Example demonstrating Swizz.h generative API usage */
 
 int main(void)
 {
-    printf("SwizzTable Example (Generative API)\n");
+    printf("Swizz.h Example (Generative API)\n");
     printf("===================================\n\n");
     
     /* Initialize table */

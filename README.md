@@ -1,4 +1,10 @@
-# swizz.h
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="/.github/images/logo.png">
+  <source media="(prefers-color-scheme: light)" srcset="/.github/images/logo.png">
+  <img src="/.github/images/logo.png" width="240" alt="swizz.h" >
+</picture>	
+</p>
 
 [![api reference](https://img.shields.io/badge/api-reference-blue.svg)](docs/API.md)
 
@@ -48,7 +54,7 @@ static inline const char* str_dup(const char *str) {
 // Define value type
 typedef struct { uint32_t id; unsigned flags; } symtab_value_t;
 
-// Configure the SwizzTable
+// Configure the Swizz.h
 #define SWIZZ_NAME symtab
 #define SWIZZ_KEY_TYPE const char*
 #define SWIZZ_VALUE_TYPE symtab_value_t
@@ -179,7 +185,7 @@ the [API reference](docs/API.md) for the full list of operations.
 
 ## Options
 
-SwizzTable provides options for customizing your hash table. All options are
+Swizz.h provides options for customizing your hash table. All options are
 set using the C preprocessor.
 
 | Option                          | Description |
@@ -197,7 +203,7 @@ set using the C preprocessor.
 
 ## Namespaces
 
-Each SwizzTable will have its own namespace using the `SWIZZ_NAME` define.
+Each Swizz.h will have its own namespace using the `SWIZZ_NAME` define.
 
 For example, the following will create a hash table using the `symtab` namespace:
 
@@ -250,10 +256,10 @@ For the remainder of this README, and unless otherwise specified, the prefix
 
 ## Hash Functions
 
-Every SwizzTable requires a hash function defined using `SWIZZ_HASH`. This is
+Every Swizz.h requires a hash function defined using `SWIZZ_HASH`. This is
 a code fragment that takes a key and returns a `uint64_t` hash value.
 
-SwizzTable provides two built-in hash functions for strings:
+Swizz.h provides two built-in hash functions for strings:
 
 ```c
 uint64_t hash_string(const char *str);              // case-sensitive
@@ -268,7 +274,7 @@ For integer keys, the hash can be the identity function:
 
 ## Equality Comparison
 
-Every SwizzTable requires an equality comparison defined using `SWIZZ_EQ`. This
+Every Swizz.h requires an equality comparison defined using `SWIZZ_EQ`. This
 is a code fragment that compares two keys and returns true if they are equal.
 
 For strings:
@@ -327,7 +333,7 @@ For POD keys:
 
 ## Bloom Filter
 
-SwizzTable includes a 256-bit Bloom filter for fast negative lookups. Before
+Swizz.h includes a 256-bit Bloom filter for fast negative lookups. Before
 probing the hash table, the Bloom filter is checked to quickly determine if a
 key is definitely not present.
 
@@ -369,12 +375,12 @@ are used.
 
 ## Performance
 
-The following benchmarks show SwizzTable performance compared to typical hash
+The following benchmarks show Swizz.h performance compared to typical hash
 table implementations.
 
 Benchmarking 100,000 keys, 5 runs, taking the average result on a modern CPU.
 
-### SwizzTable
+### Swizz.h
 
 ```
 Insert              100,000 ops in   0.033 secs    330 ns/op     3,021,844 op/sec
@@ -386,7 +392,7 @@ Mixed workload      100,000 ops in   0.044 secs    440 ns/op     2,272,727 op/se
 
 ## Implementation Details
 
-SwizzTable implements the following design features:
+Swizz.h implements the following design features:
 
 ### Swizz Table Probing
 
@@ -423,4 +429,4 @@ functionality.
 
 ## License
 
-SwizzTable is released under the MIT License.
+Swizz.h is released under the MIT License.

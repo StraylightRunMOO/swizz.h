@@ -26,7 +26,7 @@ typedef struct { uint32_t id; unsigned flags; } symtab_value_t;
 #define SWIZZ_FREE_KEY(k) free((void*)(k))
 #include "../swizz.h"
 
-/* Simple benchmark suite for SwizzTable generative API */
+/* Simple benchmark suite for Swizz.h generative API */
 
 #define NUM_KEYS 100000
 #define WARMUP_ITERATIONS 3
@@ -200,7 +200,7 @@ static double benchmark_mixed(int num_keys)
 
 int main(void)
 {
-    printf("SwizzTable Benchmarks (Generative API)\n");
+    printf("Swizz.h Benchmarks (Generative API)\n");
     printf("======================================\n\n");
     printf("Running with %d keys\n\n", NUM_KEYS);
     
