@@ -313,6 +313,54 @@ static int test_generation_counter(void)
     return (gen0 == 0 && gen1 > gen0 && gen2 >= gen1);
 }
 
+/* Second table in this translation unit. v1.1.0 defined the SIMD ctrl
+ * allocator once per file, so this include failed to compile. The custom
+ * allocator must not be used by the first table. */
+static int idmap_allocs;
+static int idmap_frees;
+
+static void *id_malloc(size_t n) { idmap_allocs++; return malloc(n); }
+static void *id_calloc(size_t n, size_t sz) { idmap_allocs++; return calloc(n, sz); }
+static void id_free(void *p) { if (p) { idmap_frees++; free(p); } }
+
+#define SWIZZ_NAME idmap
+#define SWIZZ_KEY_TYPE uint64_t
+#define SWIZZ_VALUE_TYPE int
+#define SWIZZ_HASH(k) hash_u64(k)
+#define SWIZZ_EQ(a, b) ((a) == (b))
+#define SWIZZ_DUP_KEY(k) (k)
+#define SWIZZ_FREE_KEY(k) ((void)(k))
+#define SWIZZ_ALLOC_MALLOC(sz) id_malloc(sz)
+#define SWIZZ_ALLOC_CALLOC(n, sz) id_calloc((n), (sz))
+#define SWIZZ_ALLOC_FREE(p) id_free(p)
+#include "../swizz.h"
+
+static int test_two_tables(void)
+{
+    idmap_allocs = 0;
+    idmap_frees = 0;
+
+    symtab_table sym;
+    symtab_init(&sym);
+    symtab_value_t sval = { .id = 7, .flags = 0 };
+    if (!symtab_add(&sym, "alpha", sval, 0)) { symtab_free(&sym); return 0; }
+    if (idmap_allocs != 0) { symtab_free(&sym); return 0; }
+
+    idmap_table ids;
+    idmap_init(&ids);
+    if (!idmap_add(&ids, 42, 9, 0)) { idmap_free(&ids); symtab_free(&sym); return 0; }
+    idmap_entry *ie = idmap_find(&ids, 42);
+    symtab_entry *se = symtab_find(&sym, "alpha");
+    int pass = ie && ie->value == 9 && se && se->value.id == 7 && idmap_allocs > 0;
+
+    int frees_after_id = 0;
+    idmap_free(&ids);
+    frees_after_id = idmap_frees;
+    symtab_free(&sym);
+    pass = pass && frees_after_id > 0 && idmap_frees == frees_after_id;
+    return pass;
+}
+
 int main(void)
 {
     printf("Swizz.h Test Suite (Generative API)\n");
@@ -332,6 +380,7 @@ int main(void)
     RUN_TEST(test_empty_table);
     RUN_TEST(test_table_growth);
     RUN_TEST(test_generation_counter);
+    RUN_TEST(test_two_tables);
     
     printf("\n---------------------\n");
     printf("Results: %d/%d tests passed\n", tests_passed, tests_run);

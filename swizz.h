@@ -18,8 +18,8 @@
 
 #define SWIZZ_VERSION_MAJOR 1
 #define SWIZZ_VERSION_MINOR 1
-#define SWIZZ_VERSION_PATCH 0
-#define SWIZZ_VERSION_STRING "1.1.0"
+#define SWIZZ_VERSION_PATCH 1
+#define SWIZZ_VERSION_STRING "1.1.1"
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -447,38 +447,7 @@ static inline int swizz_probe_available(const uint8_t *ctrl)
 #  endif
 #endif
 
-static inline uint8_t* swizz_alloc_ctrl_aligned(size_t cap)
-{
-    size_t align = SWIZZ_GROUP_WIDTH;
-#if defined(SWIZZ_ALLOC_ALIGNED_C11)
-    /* aligned_alloc requires size % align == 0. cap is already a power of
-     * two >= align, so this always holds. */
-    return (uint8_t*)aligned_alloc(align, cap);
-#elif defined(SWIZZ_ALLOC_ALIGNED_POSIX)
-    void *p = NULL;
-    if (posix_memalign(&p, align, cap) != 0) return NULL;
-    return (uint8_t*)p;
-#else
-    /* Hand-rolled: overallocate, align up, tuck original pointer just before. */
-    void *raw = SWIZZ_ALLOC_MALLOC(cap + align + sizeof(void*));
-    if (!raw) return NULL;
-    uintptr_t addr = (uintptr_t)raw + sizeof(void*);
-    addr = (addr + align - 1) & ~(uintptr_t)(align - 1);
-    ((void**)addr)[-1] = raw;
-    return (uint8_t*)addr;
-#endif
-}
-
-static inline void swizz_free_ctrl_aligned(uint8_t *ctrl)
-{
-    if (!ctrl) return;
-#if defined(SWIZZ_ALLOC_ALIGNED_C11) || defined(SWIZZ_ALLOC_ALIGNED_POSIX)
-    free(ctrl);
-#else
-    SWIZZ_ALLOC_FREE(((void**)ctrl)[-1]);
-#endif
-}
-#endif
+#endif /* SWIZZ_USE_SIMD */
 
 /* ------------------------------------------------------------------
  * Token pasting helpers (two-stage to force macro expansion)
@@ -503,6 +472,44 @@ static inline void swizz_free_ctrl_aligned(uint8_t *ctrl)
 #define SWIZZ_ITER_NEXT        SWIZZ_CONCAT(SWIZZ_NAME, _iter_next)
 #define SWIZZ_INSERT_HASHED_   SWIZZ_CONCAT(SWIZZ_NAME, _insert_hashed_internal)
 #define SWIZZ_GROW_            SWIZZ_CONCAT(SWIZZ_NAME, _grow_internal)
+#define SWIZZ_ALLOC_CTRL_FN    SWIZZ_CONCAT(SWIZZ_NAME, _alloc_ctrl_aligned)
+#define SWIZZ_FREE_CTRL_FN     SWIZZ_CONCAT(SWIZZ_NAME, _free_ctrl_aligned)
+
+/* Per-table names so a second #include in this translation unit does not
+ * redefine the helpers. Each table closes over its own allocator macros. */
+#if SWIZZ_USE_SIMD
+static inline uint8_t* SWIZZ_ALLOC_CTRL_FN(size_t cap)
+{
+    size_t align = SWIZZ_GROUP_WIDTH;
+#if defined(SWIZZ_ALLOC_ALIGNED_C11)
+    /* aligned_alloc requires size % align == 0. cap is already a power of
+     * two >= align, so this always holds. */
+    return (uint8_t*)aligned_alloc(align, cap);
+#elif defined(SWIZZ_ALLOC_ALIGNED_POSIX)
+    void *p = NULL;
+    if (posix_memalign(&p, align, cap) != 0) return NULL;
+    return (uint8_t*)p;
+#else
+    /* Hand-rolled: overallocate, align up, tuck original pointer just before. */
+    void *raw = SWIZZ_ALLOC_MALLOC(cap + align + sizeof(void*));
+    if (!raw) return NULL;
+    uintptr_t addr = (uintptr_t)raw + sizeof(void*);
+    addr = (addr + align - 1) & ~(uintptr_t)(align - 1);
+    ((void**)addr)[-1] = raw;
+    return (uint8_t*)addr;
+#endif
+}
+
+static inline void SWIZZ_FREE_CTRL_FN(uint8_t *ctrl)
+{
+    if (!ctrl) return;
+#if defined(SWIZZ_ALLOC_ALIGNED_C11) || defined(SWIZZ_ALLOC_ALIGNED_POSIX)
+    free(ctrl);
+#else
+    SWIZZ_ALLOC_FREE(((void**)ctrl)[-1]);
+#endif
+}
+#endif
 
 /* ------------------------------------------------------------------
  * Internal entry (key is owned by table)
@@ -561,7 +568,7 @@ static inline void SWIZZ_FREE_FN(SWIZZ_TABLE_T *table)
         }
         SWIZZ_ALLOC_FREE(table->entries);
 #if SWIZZ_USE_SIMD
-        swizz_free_ctrl_aligned(table->ctrl);
+        SWIZZ_FREE_CTRL_FN(table->ctrl);
 #else
         SWIZZ_ALLOC_FREE(table->ctrl);
 #endif
@@ -576,7 +583,7 @@ static inline void SWIZZ_CLEAR(SWIZZ_TABLE_T *table)
     for (uint32_t i = 0; i < table->capacity; i++) {
         if (table->ctrl[i] != 0x00 && table->ctrl[i] != 0x80 && table->entries[i].key) {
             SWIZZ_FREE_KEY(table->entries[i].key);
-            table->entries[i].key = NULL;
+            table->entries[i].key = (SWIZZ_KEY_TYPE){0};
         }
     }
     memset(table->ctrl, 0x00, table->capacity);
@@ -617,7 +624,7 @@ static inline bool SWIZZ_GROW_(SWIZZ_TABLE_T *table, uint32_t new_cap)
 
     SWIZZ_ENTRY_T *new_entries = SWIZZ_ALLOC_CALLOC(new_cap, sizeof(SWIZZ_ENTRY_T));
 #if SWIZZ_USE_SIMD
-    uint8_t *new_ctrl = swizz_alloc_ctrl_aligned(new_cap);
+    uint8_t *new_ctrl = SWIZZ_ALLOC_CTRL_FN(new_cap);
 #else
     uint8_t *new_ctrl = SWIZZ_ALLOC_MALLOC(new_cap);
 #endif
@@ -625,7 +632,7 @@ static inline bool SWIZZ_GROW_(SWIZZ_TABLE_T *table, uint32_t new_cap)
         if (new_entries) SWIZZ_ALLOC_FREE(new_entries);
         if (new_ctrl) {
 #if SWIZZ_USE_SIMD
-            swizz_free_ctrl_aligned(new_ctrl);
+            SWIZZ_FREE_CTRL_FN(new_ctrl);
 #else
             SWIZZ_ALLOC_FREE(new_ctrl);
 #endif
@@ -671,7 +678,7 @@ static inline bool SWIZZ_GROW_(SWIZZ_TABLE_T *table, uint32_t new_cap)
 
         SWIZZ_ALLOC_FREE(table->entries);
 #if SWIZZ_USE_SIMD
-        swizz_free_ctrl_aligned(table->ctrl);
+        SWIZZ_FREE_CTRL_FN(table->ctrl);
 #else
         SWIZZ_ALLOC_FREE(table->ctrl);
 #endif
@@ -1083,7 +1090,7 @@ static inline bool SWIZZ_DELETE(SWIZZ_TABLE_T *table, SWIZZ_KEY_TYPE key)
             if (SWIZZ_EQ(e->key, key)) {
                 table->ctrl[candidate] = 0x80;
                 SWIZZ_FREE_KEY(e->key);
-                e->key = NULL;
+                e->key = (SWIZZ_KEY_TYPE){0};
                 e->hash = 0;
                 table->count--;
                 table->tombstones++;
@@ -1106,7 +1113,7 @@ static inline bool SWIZZ_DELETE(SWIZZ_TABLE_T *table, SWIZZ_KEY_TYPE key)
             if (SWIZZ_EQ(e->key, key)) {
                 table->ctrl[slot] = 0x80;
                 SWIZZ_FREE_KEY(e->key);
-                e->key = NULL;
+                e->key = (SWIZZ_KEY_TYPE){0};
                 e->hash = 0;
                 table->count--;
                 table->tombstones++;
@@ -1174,6 +1181,11 @@ static inline SWIZZ_ENTRY_T* SWIZZ_ITER_NEXT(SWIZZ_TABLE_T *table, SWIZZ_ITER_T 
 #undef SWIZZ_ALLOC_CALLOC
 #undef SWIZZ_ALLOC_FREE
 #undef SWIZZ_ALLOC_MALLOC_USER
+#undef SWIZZ_ALLOC_ALIGNED_HANDROLLED
+#undef SWIZZ_ALLOC_ALIGNED_C11
+#undef SWIZZ_ALLOC_ALIGNED_POSIX
+#undef SWIZZ_ALLOC_CTRL_FN
+#undef SWIZZ_FREE_CTRL_FN
 #undef SWIZZ_CONCAT
 #undef SWIZZ_TABLE_T
 #undef SWIZZ_ENTRY_T
